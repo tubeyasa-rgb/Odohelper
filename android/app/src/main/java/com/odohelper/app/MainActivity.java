@@ -3,7 +3,10 @@ package com.odohelper.app;
 import android.app.Activity;
 import android.content.Intent;
 import android.database.Cursor;
-import android.net.Uri;
+import android.Manifest;
+import android.app.AlertDialog;
+import android.content.pm.PackageManager;
+import java.util.ArrayList;
 import android.os.Bundle;
 import android.provider.ContactsContract;
 import android.webkit.JavascriptInterface;
@@ -34,18 +37,58 @@ public class MainActivity extends Activity {
     web.loadUrl("file:///android_asset/index.html");
   }
   private void send(String js) { runOnUiThread(() -> web.evaluateJavascript(js, null)); }
-  @Override protected void onActivityResult(int request, int result, Intent data) {
-    super.onActivityResult(request,result,data);
-    if (request != 7 || result != RESULT_OK || data == null) return;
-    try (Cursor c = getContentResolver().query(data.getData(), new String[]{ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER}, null,null,null)) {
-      if (c != null && c.moveToFirst()) {
-        JSONObject contact = new JSONObject().put("name", c.getString(0)).put("phone", c.getString(1)).put("email", "");
-        send("nativeContact(" + contact.toString() + ")");
-      }
-    } catch (Exception e) { send("document.getElementById('contactMessage').textContent=" + JSONObject.quote("تعذر قراءة جهة الاتصال") ); }
+  private void contactMessage(String message) {
+    send("document.getElementById('contactMessage').textContent=" + JSONObject.quote(message));
+  }
+  private void chooseContacts() {
+    if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+      requestPermissions(new String[]{Manifest.permission.READ_CONTACTS}, 7);
+      return;
+    }
+    contactMessage("جاري تحميل جهات الاتصال...");
+    worker.execute(() -> {
+      ArrayList<JSONObject> contacts = new ArrayList<>();
+      ArrayList<String> labels = new ArrayList<>();
+      try (Cursor c = getContentResolver().query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+          new String[]{ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER},
+          null, null, ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " COLLATE LOCALIZED ASC")) {
+        if (c == null) throw new IOException("تعذر قراءة جهات الاتصال");
+        while (c.moveToNext()) {
+          String name = c.isNull(0) ? "" : c.getString(0);
+          String phone = c.isNull(1) ? "" : c.getString(1);
+          contacts.add(obj("name", name, "phone", phone, "email", ""));
+          labels.add(name + "\n" + phone);
+        }
+        runOnUiThread(() -> showContactDialog(contacts, labels));
+      } catch (Exception e) { contactMessage("تعذر قراءة جهات الاتصال"); }
+    });
+  }
+  private void showContactDialog(ArrayList<JSONObject> contacts, ArrayList<String> labels) {
+    if (contacts.isEmpty()) { contactMessage("لا توجد جهات اتصال بأرقام هاتف."); return; }
+    contactMessage("");
+    boolean[] checked = new boolean[contacts.size()];
+    AlertDialog dialog = new AlertDialog.Builder(this).setTitle("اختار جهات الاتصال")
+      .setMultiChoiceItems(labels.toArray(new String[0]), checked, (d, which, value) -> checked[which] = value)
+      .setPositiveButton("متابعة", (d, which) -> {
+        JSONArray chosen = new JSONArray();
+        for (int i = 0; i < contacts.size(); i++) if (checked[i]) chosen.put(contacts.get(i));
+        if (chosen.length() == 0) contactMessage("لم يتم اختيار جهات اتصال.");
+        else send("nativeContacts(" + chosen.toString() + ")");
+      }).setNegativeButton("إلغاء", null).setNeutralButton("تحديد الكل", null).create();
+    dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
+      for (int i = 0; i < checked.length; i++) { checked[i] = true; dialog.getListView().setItemChecked(i, true); }
+    }));
+    dialog.show();
+  }
+  @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+    super.onRequestPermissionsResult(request, permissions, results);
+    if (request == 7) {
+      if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) chooseContacts();
+      else contactMessage("اسمح بالوصول لجهات الاتصال لاختيارها.");
+    }
   }
   class Bridge {
-    @JavascriptInterface public void pickContact() { runOnUiThread(() -> { try { startActivityForResult(new Intent(Intent.ACTION_PICK, ContactsContract.CommonDataKinds.Phone.CONTENT_URI), 7); } catch (Exception e) { send("document.getElementById('contactMessage').textContent=" + JSONObject.quote("تعذر فتح جهات الاتصال")); } }); }
+    @JavascriptInterface public void pickContact() { runOnUiThread(() -> chooseContacts()); }
     @JavascriptInterface public void request(int id, String path, String json) { worker.execute(() -> {
       JSONObject answer = new JSONObject();
       try { answer.put("result", handle(path, new JSONObject(json))); }
@@ -71,7 +114,9 @@ public class MainActivity extends Activity {
   private Object call(String model,String method,JSONArray args,JSONObject kwargs) throws Exception {return rpc("/web/dataset/call_kw",obj("model",model,"method",method,"args",args,"kwargs",kwargs));}
   private Object handle(String path,JSONObject body) throws Exception {
     if(path.equals("/login")) {
-      URI uri=new URI(body.getString("url")); if(!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost()==null || uri.getUserInfo()!=null) throw new Exception("استخدم رابط أودو آمن يبدأ بـ HTTPS");
+      String address=body.getString("url").trim();
+      if (!address.matches("(?i)^[a-z][a-z0-9+.-]*://.*")) address="https://" + address;
+      URI uri=new URI(address); if(!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost()==null || uri.getUserInfo()!=null) throw new Exception("استخدم رابط أودو آمن يبدأ بـ HTTPS");
       base=new URI("https",null,uri.getHost(),uri.getPort(),null,null,null).toString(); cookie=null;
       String db=body.optString("db").trim(); if(db.isEmpty()){JSONArray dbs=(JSONArray)rpc("/web/database/list",new JSONObject()); if(dbs.length()!=1) throw new Exception("اكتب اسم قاعدة البيانات للمتابعة"); db=dbs.getString(0);}
       JSONObject auth=(JSONObject)rpc("/web/session/authenticate",obj("db",db,"login",body.optString("login"),"password",body.optString("password")));

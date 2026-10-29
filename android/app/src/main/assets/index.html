@@ -328,8 +328,11 @@
 
       <input
         id="url"
-        type="url"
-        placeholder="https://yourcompany.odoo.com"
+        type="text"
+        inputmode="url"
+        autocapitalize="none"
+        autocorrect="off"
+        placeholder="yourcompany.odoo.com"
         required
         dir="ltr"
       >
@@ -376,11 +379,11 @@
       if (response.error) pending.reject(new Error(response.error));
       else pending.resolve(response.result);
     }
-    function nativeContact(contact) {
-      if (!contact) return;
-      selected.push(contact);
+    function nativeContacts(contacts) {
+      if (!contacts.length) return;
+      selected = contacts;
       renderContacts();
-      $('contactMessage').textContent = 'يمكنك اختيار جهة أخرى قبل الرفع.';
+      $('contactMessage').textContent = 'راجع الجهات المحددة قبل الرفع.';
     }
 
     async function signIn(event) {
@@ -486,6 +489,7 @@
         });
 
         $('upload').classList.add('hidden');
+        selected = [];
 
         $('contactMessage').textContent =
           'نتيجة الرفع:';
