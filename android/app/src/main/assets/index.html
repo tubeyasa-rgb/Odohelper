@@ -411,9 +411,21 @@
 
         $('top').textContent = 'تسجيل الخروج';
 
-        $('top').onclick = async () => {
-          await api('/logout', {});
-          location.reload();
+        $('top').onclick = () => {
+          clearTimeout(timer);
+          api('/logout', {}).catch(() => {});
+          selected = [];
+          $('contacts').replaceChildren();
+          $('results').replaceChildren();
+          $('query').value = '';
+          $('contactMessage').textContent = '';
+          $('loginError').textContent = '';
+          $('password').value = '';
+          $('upload').classList.add('hidden');
+          $('app').classList.add('hidden');
+          $('welcome').classList.remove('hidden');
+          $('top').textContent = 'تسجيل الدخول ←';
+          $('top').onclick = () => login.showModal();
         };
 
         search();

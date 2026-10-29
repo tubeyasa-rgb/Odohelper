@@ -122,8 +122,8 @@ public class MainActivity extends Activity {
       JSONObject auth=(JSONObject)rpc("/web/session/authenticate",obj("db",db,"login",body.optString("login"),"password",body.optString("password")));
       if(auth.optInt("uid",0)==0) throw new Exception("بيانات الدخول غير صحيحة"); return obj("name",auth.optString("name"));
     }
-    if(base==null || cookie==null) throw new Exception("سجّل الدخول أولاً");
     if(path.equals("/logout")){base=null;cookie=null;return new JSONObject();}
+    if(base==null || cookie==null) throw new Exception("سجّل الدخول أولاً");
     if(path.equals("/contacts")) {
       JSONArray output=new JSONArray(), contacts=body.optJSONArray("contacts"); if(contacts==null)return output;
       for(int i=0;i<contacts.length();i++){JSONObject contact=contacts.getJSONObject(i); String name=contact.optString("name").trim(), phone=contact.optString("phone");if(name.isEmpty())continue;
