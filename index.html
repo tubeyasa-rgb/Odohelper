@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <title>odohelper</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #f7f8f6;
+      color: #202622;
+      font: 16px system-ui;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 7%;
+      background: white;
+      border-bottom: 1px solid #e9ede9;
+    }
+
+    .logo {
+      font-size: 24px;
+      font-weight: 800;
+      direction: ltr;
+    }
+
+    .logo span {
+      color: #819578;
+    }
+
+    main {
+      max-width: 1000px;
+      margin: auto;
+      padding: 55px 24px;
+    }
+
+    .tag {
+      background: #e9f1e5;
+      border-radius: 99px;
+      padding: 9px 16px;
+      font-size: 13px;
+      color: #597453;
+    }
+
+    h1 {
+      font-size: clamp(35px, 6vw, 56px);
+      line-height: 1.25;
+      margin: 22px 0;
+    }
+
+    h2 {
+      font-size: 22px;
+    }
+
+    p,
+    small {
+      color: #798079;
+      line-height: 1.8;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 40px;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid #e9eee8;
+      border-radius: 22px;
+      padding: 28px;
+    }
+
+    .icon {
+      background: #edf4ea;
+      color: #6f8a67;
+      border-radius: 14px;
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      font-size: 24px;
+    }
+
+    button,
+    .button {
+      border: 0;
+      background: #718b69;
+      color: white;
+      border-radius: 10px;
+      padding: 13px 19px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    button.secondary {
+      background: #edf4ea;
+      color: #5d7757;
+    }
+
+    dialog {
+      border: 0;
+      border-radius: 24px;
+      padding: 32px;
+      max-width: 450px;
+      width: 92%;
+    }
+
+    dialog::backdrop {
+      background: #18221988;
+    }
+
+    label {
+      display: block;
+      font-size: 14px;
+      margin: 14px 0 6px;
+    }
+
+    input {
+      border: 1px solid #dfe6dd;
+      border-radius: 10px;
+      padding: 12px;
+      font: inherit;
+    }
+
+    form input,
+    .search {
+      width: 100%;
+    }
+
+    .close {
+      float: left;
+      background: #f2f4f1;
+      color: #555;
+      padding: 8px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px 0;
+      border-bottom: 1px solid #edf0ec;
+    }
+
+    .row input[type=text],
+    .row input[type=email] {
+      width: 30%;
+    }
+
+    .error {
+      color: #aa4b40;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    footer {
+      margin-top: 60px;
+      color: #929a91;
+      font-size: 13px;
+    }
+
+    @media (max-width: 650px) {
+      .cards {
+        grid-template-columns: 1fr;
+      }
+
+      .row {
+        flex-wrap: wrap;
+      }
+
+      .row input[type=text],
+      .row input[type=email] {
+        width: 40%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <div class="logo">
+      odo<span>helper</span> ◒
+    </div>
+
+    <button
+      id="top"
+      class="secondary"
+      onclick="login.showModal()"
+    >
+      تسجيل الدخول ←
+    </button>
+  </header>
+
+  <main>
+    <section id="welcome">
+      <span class="tag">مساعدك اليومي لأودو ✦</span>
+
+      <h1>
+        كل شغلك على أودو،<br>
+        أقرب وأسهل.
+      </h1>
+
+      <p>
+        جهات اتصالك وتقاريرك في مكان واحد.
+        تجربة بسيطة تساعدك تنجز شغلك من الموبايل.
+      </p>
+
+      <button onclick="login.showModal()">
+        ابدأ الآن ←
+      </button>
+
+      <div class="cards">
+        <div class="card">
+          <div class="icon">♙</div>
+          <h2>جهات الاتصال</h2>
+
+          <p>
+            اختار جهات الاتصال من موبايلك،
+            راجع بياناتها، وارفع اللي تحتاجه على أودو.
+          </p>
+        </div>
+
+        <div class="card">
+          <div class="icon">▤</div>
+          <h2>التقارير والمشاركة</h2>
+
+          <p>
+            ابحث في المبيعات والمشتريات والحسابات
+            المتاحة لك، وشارك الروابط بسهولة على واتساب.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section id="app" class="hidden">
+      <span class="tag">مساحة عملك ✦</span>
+      <h1 id="greeting">أهلاً بيك</h1>
+      <p>كل اللي تحتاجه في مكان واحد.</p>
+
+      <div class="cards">
+        <div class="card">
+          <div class="icon">♙</div>
+          <h2>جهات الاتصال</h2>
+
+          <p>
+            اختار جهات الاتصال وراجعها قبل الرفع.
+          </p>
+
+          <button onclick="pick()">
+            اختيار جهات الاتصال
+          </button>
+
+          <p id="contactMessage"></p>
+          <div id="contacts"></div>
+
+          <button
+            id="upload"
+            class="hidden"
+            onclick="uploadContacts()"
+          >
+            رفع المحدد إلى أودو
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="icon">▤</div>
+          <h2>البحث والمشاركة</h2>
+
+          <p>
+            ابحث برقم المستند في المبيعات
+            والمشتريات والحسابات.
+          </p>
+
+          <input
+            class="search"
+            id="query"
+            placeholder="ابحث عن مستند..."
+            oninput="search()"
+          >
+
+          <div id="results"></div>
+
+          <small>
+            تظهر المستندات المتاحة لحسابك.
+            المشاركة ترسل رابط المستند.
+          </small>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      odohelper · مساعد بسيط ليوم عمل أسهل
+    </footer>
+  </main>
+
+  <dialog id="login">
+    <button class="close" onclick="login.close()">✕</button>
+
+    <h2>أهلاً بيك في odohelper</h2>
+
+    <p>
+      سجّل دخولك ببيانات حساب أودو الخاص بك.
+    </p>
+
+    <form onsubmit="signIn(event)">
+      <label>رابط أودو</label>
+
+      <input
+        id="url"
+        type="url"
+        placeholder="https://yourcompany.odoo.com"
+        required
+        dir="ltr"
+      >
+
+      <label>اسم قاعدة البيانات (عند الحاجة)</label>
+      <input id="db" dir="ltr">
+
+      <label>اسم المستخدم أو البريد الإلكتروني</label>
+      <input id="username" required dir="ltr">
+
+      <label>كلمة المرور</label>
+
+      <input
+        id="password"
+        type="password"
+        required
+        dir="ltr"
+      >
+
+      <p id="loginError" class="error"></p>
+
+      <button>تسجيل الدخول ←</button>
+    </form>
+  </dialog>
+
+  <script>
+    const $ = id => document.getElementById(id);
+
+    let selected = [];
+
+    async function api(path, data) {
+      const response = await fetch(path, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error);
+      }
+
+      return result;
+    }
+
+    async function signIn(event) {
+      event.preventDefault();
+
+      $('loginError').textContent =
+        'جاري تسجيل الدخول...';
+
+      try {
+        const result = await api('/login', {
+          url: $('url').value,
+          db: $('db').value,
+          login: $('username').value,
+          password: $('password').value
+        });
+
+        $('password').value = '';
+        login.close();
+
+        $('welcome').classList.add('hidden');
+        $('app').classList.remove('hidden');
+
+        $('greeting').textContent =
+          'أهلاً بيك، ' + result.name;
+
+        $('top').textContent = 'تسجيل الخروج';
+
+        $('top').onclick = async () => {
+          await api('/logout', {});
+          location.reload();
+        };
+
+        search();
+      } catch (error) {
+        $('loginError').textContent = error.message;
+      }
+    }
+
+    async function pick() {
+      if (!navigator.contacts || !navigator.contacts.select) {
+        $('contactMessage').textContent =
+          'اختيار جهات الاتصال غير متاح في هذا المتصفح. ' +
+          'جرّب Chrome على أندرويد عبر اتصال آمن HTTPS.';
+
+        return;
+      }
+
+      try {
+        const contacts = await navigator.contacts.select(
+          ['name', 'tel', 'email'],
+          { multiple: true }
+        );
+
+        selected = contacts.map(contact => ({
+          name: contact.name?.[0] || '',
+          phone: contact.tel?.[0] || '',
+          email: contact.email?.[0] || ''
+        }));
+
+        renderContacts();
+      } catch (error) {
+        $('contactMessage').textContent =
+          'لم يتم اختيار جهات اتصال.';
+      }
+    }
+
+    function renderContacts() {
+      const container = $('contacts');
+      container.replaceChildren();
+
+      selected.forEach((contact, index) => {
+        const row = document.createElement('div');
+        row.className = 'row';
+
+        const check = document.createElement('input');
+        check.type = 'checkbox';
+        check.checked = true;
+        check.dataset.index = index;
+        row.append(check);
+
+        for (const key of ['name', 'phone', 'email']) {
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.value = contact[key];
+          input.placeholder = key;
+
+          input.oninput = () => {
+            contact[key] = input.value;
+          };
+
+          row.append(input);
+        }
+
+        container.append(row);
+      });
+
+      $('upload').classList.toggle(
+        'hidden',
+        !selected.length
+      );
+    }
+
+    async function uploadContacts() {
+      const contacts = [
+        ...$('contacts').querySelectorAll(
+          'input[type=checkbox]:checked'
+        )
+      ].map(input => selected[input.dataset.index]);
+
+      if (!contacts.length) return;
+
+      $('contactMessage').textContent =
+        'جاري الرفع...';
+
+      try {
+        const results = await api('/contacts', {
+          contacts
+        });
+
+        $('contacts').replaceChildren();
+
+        results.forEach(result => {
+          const p = document.createElement('p');
+
+          p.textContent =
+            result.name + ' — ' + result.status;
+
+          $('contacts').append(p);
+        });
+
+        $('upload').classList.add('hidden');
+
+        $('contactMessage').textContent =
+          'نتيجة الرفع:';
+      } catch (error) {
+        $('contactMessage').textContent = error.message;
+      }
+    }
+
+    let timer;
+
+    function search() {
+      clearTimeout(timer);
+
+      timer = setTimeout(async () => {
+        try {
+          const rows = await api('/reports', {
+            query: $('query').value
+          });
+
+          $('results').replaceChildren();
+
+          if (!rows.length) {
+            $('results').textContent =
+              'لا توجد نتائج متاحة.';
+            return;
+          }
+
+          rows.forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'row';
+
+            const link = document.createElement('a');
+            link.href = item.url;
+            link.target = '_blank';
+            link.rel = 'noopener';
+
+            link.textContent =
+              item.label + ' · ' + item.name;
+
+            const share = document.createElement('a');
+
+            share.href =
+              'https://wa.me/?text=' +
+              encodeURIComponent(
+                item.label + ' · ' +
+                item.name + '\n' +
+                item.url
+              );
+
+            share.target = '_blank';
+            share.rel = 'noopener';
+            share.textContent = 'واتساب ↗';
+
+            row.append(link, share);
+            $('results').append(row);
+          });
+        } catch (error) {
+          $('results').textContent = error.message;
+        }
+      }, 300);
+    }
+  </script>
+</body>
+</html>
