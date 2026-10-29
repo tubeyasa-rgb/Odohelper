@@ -319,6 +319,7 @@
         <p><button onclick="loadLedger()">عرض كشف الحساب</button></p><div id="ledgerResult"></div>
       </section>
       <section id="settings" class="card hidden"><div class="icon">⚙</div><h2>الإعدادات</h2>
+        <label for="reminderTime">موعد إشعار الفواتير المستحقة</label><input type="time" id="reminderTime" value="09:00"><p><button onclick="saveReminderTime()">حفظ موعد الإشعار</button></p><p id="reminderTimeStatus" aria-live="polite"></p><small>يعتمد التوقيت على ساعة الهاتف، وقد يتأخر بسبب إعدادات البطارية أو الاتصال.</small>
         <label for="sendMode">طريقة إرسال كشف الحساب</label><select id="sendMode" onchange="saveSendMode()"><option value="manual">فتح واتساب وإرسال الملف يدويًا</option><option value="business">إرسال تلقائي عبر WhatsApp Business</option></select>
         <p><small>الإرسال التلقائي يحتاج إعداد وربط WhatsApp Business API.</small></p>
       </section>
@@ -449,6 +450,7 @@
 
         try { $('sendMode').value = localStorage.getItem('sendMode') || 'manual'; } catch (_) {}
         openSection('home');
+        loadReminderTime();
         setPeriod();
         search();
         findCustomers();
@@ -534,6 +536,17 @@
       }
     }
 
+    async function loadReminderTime() {
+      try { const t=await api('/reminder_time',{}); $('reminderTime').value=String(t.hour).padStart(2,'0')+':'+String(t.minute).padStart(2,'0'); }
+      catch(e) { $('reminderTimeStatus').textContent='تعذر تحميل موعد الإشعار: '+e.message; }
+    }
+    async function saveReminderTime() {
+      const value=$('reminderTime').value;
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) { $('reminderTimeStatus').textContent='اختار موعدًا صحيحًا.'; return; }
+      const [hour,minute]=value.split(':').map(Number);
+      try { await api('/reminder_time',{hour,minute}); $('reminderTimeStatus').textContent='تم حفظ موعد الإشعار.'; }
+      catch(e) { $('reminderTimeStatus').textContent='تعذر حفظ الموعد: '+e.message; }
+    }
     function saveSendMode() { try { localStorage.setItem('sendMode', $('sendMode').value); } catch (_) {} }
     function openSection(section) {
       const menus = {home:'nav-home', documents:'nav-documents', contactsSection:'nav-contacts', ledger:'nav-ledger', settings:'nav-settings'};

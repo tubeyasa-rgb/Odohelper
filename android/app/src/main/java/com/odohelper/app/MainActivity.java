@@ -134,6 +134,10 @@ public class MainActivity extends Activity {
     }
     if(path.equals("/logout")){InvoiceReminders.disable(this);base=null;cookie=null;return new JSONObject();}
     if(base==null || cookie==null) throw new Exception("سجّل الدخول أولاً");
+    if(path.equals("/reminder_time")) {
+      if(body.has("hour")) InvoiceReminders.setTime(this,body.getInt("hour"),body.getInt("minute"));
+      return obj("hour",InvoiceReminders.hour(this),"minute",InvoiceReminders.minute(this));
+    }
     if(path.equals("/contacts")) {
       JSONArray output=new JSONArray(), contacts=body.optJSONArray("contacts"); if(contacts==null)return output;
       for(int i=0;i<contacts.length();i++){JSONObject contact=contacts.getJSONObject(i); String name=contact.optString("name").trim(), phone=contact.optString("phone");if(name.isEmpty())continue;

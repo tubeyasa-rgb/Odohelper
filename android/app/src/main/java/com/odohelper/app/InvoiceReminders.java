@@ -28,13 +28,20 @@ public class InvoiceReminders extends JobService {
     Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,key());byte[] iv=cipher.getIV(), encrypted=cipher.doFinal(data.toString().getBytes("UTF-8"));
     context.getSharedPreferences(PREF,0).edit().putString("iv",Base64.encodeToString(iv,Base64.NO_WRAP)).putString("data",Base64.encodeToString(encrypted,Base64.NO_WRAP)).apply();schedule(context);
   }
-  public static void disable(Context context) {context.getSharedPreferences(PREF,0).edit().clear().apply();((JobScheduler)context.getSystemService(JOB_SCHEDULER_SERVICE)).cancel(JOB);}
+  public static void disable(Context context) {context.getSharedPreferences(PREF,0).edit().remove("iv").remove("data").apply();((JobScheduler)context.getSystemService(JOB_SCHEDULER_SERVICE)).cancel(JOB);}
   private static JSONObject session(Context c) throws Exception {
     android.content.SharedPreferences prefs=c.getSharedPreferences(PREF,0);String data=prefs.getString("data",null),iv=prefs.getString("iv",null);if(data==null||iv==null)return null;
     Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.DECRYPT_MODE,key(),new GCMParameterSpec(128,Base64.decode(iv,Base64.NO_WRAP)));return new JSONObject(new String(cipher.doFinal(Base64.decode(data,Base64.NO_WRAP)),"UTF-8"));
   }
+  public static int hour(Context c) { return c.getSharedPreferences(PREF,0).getInt("hour",9); }
+  public static int minute(Context c) { return c.getSharedPreferences(PREF,0).getInt("minute",0); }
+  public static void setTime(Context c,int hour,int minute) throws Exception {
+    if(hour<0 || hour>23 || minute<0 || minute>59) throw new IllegalArgumentException("حدد موعدًا صحيحًا");
+    c.getSharedPreferences(PREF,0).edit().putInt("hour",hour).putInt("minute",minute).apply();
+    if(session(c)!=null) schedule(c);
+  }
   public static void schedule(Context c) {
-    Calendar next=Calendar.getInstance();next.set(Calendar.HOUR_OF_DAY,9);next.set(Calendar.MINUTE,0);next.set(Calendar.SECOND,0);next.set(Calendar.MILLISECOND,0);if(next.getTimeInMillis()<=System.currentTimeMillis())next.add(Calendar.DAY_OF_YEAR,1);
+    Calendar next=Calendar.getInstance();next.set(Calendar.HOUR_OF_DAY,hour(c));next.set(Calendar.MINUTE,minute(c));next.set(Calendar.SECOND,0);next.set(Calendar.MILLISECOND,0);if(next.getTimeInMillis()<=System.currentTimeMillis())next.add(Calendar.DAY_OF_YEAR,1);
     JobInfo job=new JobInfo.Builder(JOB,new ComponentName(c,InvoiceReminders.class)).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setMinimumLatency(next.getTimeInMillis()-System.currentTimeMillis()).setPersisted(true).build();
     ((JobScheduler)c.getSystemService(JOB_SCHEDULER_SERVICE)).schedule(job);
   }
