@@ -16,6 +16,7 @@ import android.provider.ContactsContract;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebChromeClient;
 import org.json.*;
 import java.net.*;
 import java.io.*;
@@ -30,6 +31,8 @@ public class MainActivity extends Activity {
   @Override public void onCreate(Bundle state) {
     super.onCreate(state); web = new WebView(this); setContentView(web);
     web.getSettings().setJavaScriptEnabled(true);
+    web.getSettings().setDomStorageEnabled(true);
+    web.setWebChromeClient(new WebChromeClient());
     web.getSettings().setAllowFileAccess(true);
     web.addJavascriptInterface(new Bridge(), "Android");
     web.setWebViewClient(new WebViewClient() {
@@ -145,13 +148,19 @@ public class MainActivity extends Activity {
     if(path.equals("/ledger")) return ledger(body);
     if(path.equals("/share_ledger")) { shareLedger(body); return new JSONObject(); }
     if(path.equals("/share_pdf")) { shareReport(body); return new JSONObject(); }
+    if(path.equals("/portal")) {
+      String model=body.getString("model");int id=body.getInt("id");
+      if(id<=0 || !(model.equals("sale.order") || model.equals("purchase.order") || model.equals("account.move"))) throw new Exception("الرابط الخارجي غير متاح لهذا المستند");
+      Object portal=call(model,"get_portal_url",arr(arr(id)),new JSONObject());
+      if(!(portal instanceof String) || !((String)portal).startsWith("/my/")) throw new Exception("لا يوجد رابط خارجي متاح لهذا المستند");
+      return obj("url",base+portal);
+    }
     if(path.equals("/reports")) {JSONArray output=new JSONArray();String[][] models={{"sale.order","مبيعات"},{"purchase.order","مشتريات"},{"account.move","فواتير"},{"account.payment","مدفوعات"}};
-      String selected=body.optString("type","all"), partner=body.optString("partner").trim();int failures=0;
+      String selected=body.optString("type","all"); int partner=body.optInt("partner",0);int failures=0;
       for(String[] model:models){if(!selected.equals("all")&&!selected.equals(model[0]))continue;
-        try{JSONArray domain=arr(arr("name","ilike",body.optString("query")));if(!partner.isEmpty())domain.put(arr("partner_id.name","ilike",partner));
+        try{JSONArray domain=arr(arr("name","ilike",body.optString("query")));if(partner>0)domain.put(arr("partner_id","child_of",partner));
           JSONArray rows=(JSONArray)call(model[0],"search_read",arr(domain),obj("fields",arr("name","id","partner_id"),"limit",20,"order","id desc"));
           for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);int id=row.getInt("id");JSONObject item=obj("name",row.optString("name"),"label",model[1],"model",model[0],"id",id,"url",base+"/web#id="+id+"&model="+model[0]+"&view_type=form");
-            if(!model[0].equals("account.payment")) {try{Object portal=call(model[0],"get_portal_url",arr(arr(id)),new JSONObject());if(portal instanceof String && ((String)portal).startsWith("/my/"))item.put("portal",base+portal);}catch(Exception ignored){}}
             output.put(item);
           }
         }catch(Exception e){failures++;}}

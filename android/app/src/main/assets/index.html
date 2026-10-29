@@ -133,13 +133,19 @@
       margin: 14px 0 6px;
     }
 
-    input {
+    input, select {
       border: 1px solid #dfe6dd;
       border-radius: 10px;
       padding: 12px;
       font: inherit;
     }
 
+    select { width: 100%; background: white; color: #202622; }
+    .menu { display: flex; gap: 8px; overflow-x: auto; margin: 24px 0; padding-bottom: 6px; }
+    .menu button { flex: 0 0 auto; background: #edf4ea; color: #5d7757; }
+    .menu button.active { background: #718b69; color: white; }
+    .document-row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:16px 0; border-bottom:1px solid #edf0ec; }
+    .document-row > a:first-child { width:100%; font-weight:700; }
     form input,
     .search {
       width: 100%;
@@ -255,69 +261,44 @@
 
     <section id="app" class="hidden">
       <span class="tag">مساحة عملك ✦</span>
-      <h1 id="greeting">أهلاً بيك</h1>
-      <p>كل اللي تحتاجه في مكان واحد.</p>
-
-      <div class="cards">
-        <div class="card">
-          <div class="icon">♙</div>
-          <h2>جهات الاتصال</h2>
-
-          <p>
-            اختار جهات الاتصال وراجعها قبل الرفع.
-          </p>
-
-          <button onclick="pick()">
-            اختيار جهات الاتصال
-          </button>
-
-          <p id="contactMessage"></p>
-          <div id="contacts"></div>
-
-          <button
-            id="upload"
-            class="hidden"
-            onclick="uploadContacts()"
-          >
-            رفع المحدد إلى أودو
-          </button>
-        </div>
-
-        <div class="card">
-          <div class="icon">▤</div>
-          <h2>البحث والمشاركة</h2>
-
-          <p>
-            ابحث برقم المستند أو اسم العميل أو المورد، ثم شارك ملف PDF.
-          </p>
-
-          <input
-            class="search"
-            id="query"
-            placeholder="ابحث عن مستند..."
-            oninput="search()"
-          >
-
-          <label>العميل أو المورد</label><input class="search" id="partnerQuery" placeholder="اسم العميل أو المورد" oninput="search()">
-          <label>نوع المستند</label><select id="docType" onchange="search()"><option value="all">الكل</option><option value="sale.order">المبيعات</option><option value="purchase.order">المشتريات</option><option value="account.move">الفواتير</option><option value="account.payment">المدفوعات</option></select>
-          <div id="results"></div>
-
-          <small>
-            تظهر المستندات المتاحة لحسابك.
-            مشاركة PDF تستخدم تقرير أودو حسب صلاحيات حسابك.
-          </small>
-        </div>
-      </div>
-      <div class="card" style="margin-top:18px"><h2>إعدادات الإرسال</h2><label for="sendMode">طريقة إرسال كشف الحساب</label><select id="sendMode" onchange="localStorage.setItem('sendMode',this.value)"><option value="manual">فتح واتساب وإرسال الملف يدويًا</option><option value="business">إرسال تلقائي عبر WhatsApp Business</option></select><p><small>الإرسال التلقائي يحتاج إعداد وربط WhatsApp Business API.</small></p></div>
-      <div class="card" style="margin-top:18px">
+      <h2 id="greeting">أهلاً بيك</h2>
+      <nav class="menu" aria-label="أقسام التطبيق">
+        <button id="nav-documents" onclick="openSection('documents')">المستندات</button>
+        <button id="nav-contacts" onclick="openSection('contactsSection')">جهات الاتصال</button>
+        <button id="nav-ledger" onclick="openSection('ledger')">كشف الحساب</button>
+        <button id="nav-settings" onclick="openSection('settings')">الإعدادات</button>
+      </nav>
+      <section id="documents" class="card">
+        <div class="icon">▤</div><h2>المستندات</h2>
+        <p>المستندات المتاحة تظهر هنا. استخدم الفلاتر للبحث.</p>
+        <label for="query">رقم المستند</label><input class="search" id="query" placeholder="رقم أو اسم المستند">
+        <label for="partnerQuery">بحث عن عميل أو مورد</label><input class="search" id="partnerQuery" placeholder="اكتب اسمًا أو رقم هاتف" oninput="findDocumentPartners()">
+        <label for="documentPartner">العميل أو المورد</label><select id="documentPartner"><option value="">كل العملاء والموردين</option></select>
+        <p id="documentPartnerStatus" aria-live="polite"></p>
+        <label for="docType">نوع المستند</label><select id="docType"><option value="all">الكل</option><option value="sale.order">المبيعات</option><option value="purchase.order">المشتريات</option><option value="account.move">الفواتير</option><option value="account.payment">المدفوعات</option></select>
+        <p><button onclick="search()">بحث</button> <button class="secondary" onclick="clearDocumentFilters()">عرض الكل</button></p>
+        <div id="results" aria-live="polite">جاري تحميل المستندات...</div>
+        <small>تظهر المستندات المتاحة لحسابك؛ مشاركة PDF تستخدم تقرير أودو.</small>
+      </section>
+      <section id="contactsSection" class="card hidden">
+        <div class="icon">♙</div><h2>جهات الاتصال</h2><p>اختار جهات الاتصال وراجعها قبل الرفع.</p>
+        <button onclick="pick()">اختيار جهات الاتصال</button><p id="contactMessage"></p><div id="contacts"></div>
+        <button id="upload" class="hidden" onclick="uploadContacts()">رفع المحدد إلى أودو</button>
+      </section>
+      <section id="ledger" class="card hidden">
         <div class="icon">☰</div><h2>كشف حساب العميل</h2>
         <p>ابحث عن العميل وحدد الفترة لعرض قيود حساب العملاء المرحلة.</p>
-        <label>بحث عن العميل</label><input class="search" id="customerSearch" placeholder="اسم العميل أو رقم الهاتف" oninput="findCustomers()">
-        <label>العميل</label><select id="customer" style="width:100%"></select>
-        <label>الفترة</label><select id="period" onchange="setPeriod()"><option value="month">هذا الشهر</option><option value="last">الشهر الماضي</option><option value="year">هذه السنة</option><option value="custom">فترة مخصصة</option></select>
-        <label>من</label><input type="date" id="dateFrom"><label>إلى</label><input type="date" id="dateTo">
+        <label for="customerSearch">بحث عن العميل</label><input class="search" id="customerSearch" placeholder="اسم العميل أو رقم الهاتف" oninput="findCustomers()">
+        <label for="customer">العميل</label><select id="customer"><option value="">اختر العميل</option></select>
+        <p id="customerStatus" aria-live="polite"></p><button class="secondary" onclick="findCustomers()">تحديث قائمة العملاء</button>
+        <label for="period">الفترة</label><select id="period" onchange="setPeriod()"><option value="month">هذا الشهر</option><option value="last">الشهر الماضي</option><option value="year">هذه السنة</option><option value="custom">فترة مخصصة</option></select>
+        <label for="dateFrom">من</label><input type="date" id="dateFrom"><label for="dateTo">إلى</label><input type="date" id="dateTo">
         <p><button onclick="loadLedger()">عرض كشف الحساب</button></p><div id="ledgerResult"></div>
-      </div>
+      </section>
+      <section id="settings" class="card hidden"><div class="icon">⚙</div><h2>الإعدادات</h2>
+        <label for="sendMode">طريقة إرسال كشف الحساب</label><select id="sendMode" onchange="saveSendMode()"><option value="manual">فتح واتساب وإرسال الملف يدويًا</option><option value="business">إرسال تلقائي عبر WhatsApp Business</option></select>
+        <p><small>الإرسال التلقائي يحتاج إعداد وربط WhatsApp Business API.</small></p>
+      </section>
     </section>
 
     <footer>
@@ -439,10 +420,12 @@
           $('top').onclick = () => login.showModal();
         };
 
-        $('sendMode').value = localStorage.getItem('sendMode') || 'manual';
+        try { $('sendMode').value = localStorage.getItem('sendMode') || 'manual'; } catch (_) {}
+        openSection('documents');
         setPeriod();
-        findCustomers();
         search();
+        findCustomers();
+        findDocumentPartners();
       } catch (error) {
         $('loginError').textContent = error.message;
       }
@@ -524,15 +507,22 @@
       }
     }
 
+    function saveSendMode() { try { localStorage.setItem('sendMode', $('sendMode').value); } catch (_) {} }
+    function openSection(section) {
+      const menus = {documents:'nav-documents', contactsSection:'nav-contacts', ledger:'nav-ledger', settings:'nav-settings'};
+      Object.keys(menus).forEach(id => { $(id).classList.toggle('hidden', id !== section); $(menus[id]).classList.toggle('active', id === section); });
+    }
+    function clearDocumentFilters() { $('query').value=''; $('partnerQuery').value=''; $('documentPartner').value=''; $('docType').value='all'; findDocumentPartners(); search(); }
     let timer;
 
     function search() {
       clearTimeout(timer);
 
+      $('results').textContent = 'جاري تحميل المستندات...';
       timer = setTimeout(async () => {
         try {
           const rows = await api('/reports', {
-            query: $('query').value, partner: $('partnerQuery').value, type: $('docType').value
+            query: $('query').value, partner: Number($('documentPartner').value) || 0, type: $('docType').value
           });
 
           $('results').replaceChildren();
@@ -545,7 +535,7 @@
 
           rows.forEach(item => {
             const row = document.createElement('div');
-            row.className = 'row';
+            row.className = 'document-row';
 
             const link = document.createElement('a');
             link.href = item.url;
@@ -564,10 +554,13 @@
               finally { share.disabled = false; }
             };
             row.append(link, share);
-            if (item.portal) {
-              const portal = document.createElement('a');
-              portal.href = 'https://wa.me/?text=' + encodeURIComponent(item.portal);
-              portal.textContent = 'مشاركة الرابط الخارجي';
+            if (item.model !== 'account.payment') {
+              const portal = document.createElement('button');
+              portal.className = 'secondary'; portal.textContent = 'الرابط الخارجي';
+              portal.onclick = async () => { portal.disabled = true; try {
+                const result = await api('/portal', {model:item.model, id:item.id});
+                const link = document.createElement('a'); link.href = 'https://wa.me/?text=' + encodeURIComponent(result.url); link.textContent = 'إرسال الرابط عبر واتساب'; portal.replaceWith(link);
+              } catch (error) { alert('تعذر الحصول على رابط خارجي: ' + error.message); } finally { portal.disabled = false; } };
               row.append(portal);
             }
             $('results').append(row);
@@ -577,17 +570,23 @@
         }
       }, 300);
     }
-    let customerTimer;
-    function findCustomers() {
-      clearTimeout(customerTimer);
-      customerTimer = setTimeout(async () => {
-        try {
-          const list = await api('/customers', {query:$('customerSearch').value});
-          $('customer').replaceChildren();
-          list.forEach(c => { const option=document.createElement('option'); option.value=c.id; option.textContent=c.name + (c.phone ? ' · '+c.phone : ''); option.dataset.phone=c.phone || ''; $('customer').append(option); });
-        } catch(e) { $('ledgerResult').textContent=e.message; }
-      }, 300);
+    let customerTimer, documentPartnerTimer;
+    let customerRequest = 0, documentPartnerRequest = 0;
+    function populatePartners(selectId, statusId, query, isDocument) {
+      const request = isDocument ? ++documentPartnerRequest : ++customerRequest;
+      const select = $(selectId), previous = select.value;
+      $(statusId).textContent = 'جاري تحميل القائمة...';
+      api('/customers', {query}).then(list => {
+        if (request !== (isDocument ? documentPartnerRequest : customerRequest)) return;
+        select.replaceChildren();
+        const empty = document.createElement('option'); empty.value=''; empty.textContent=isDocument ? 'كل العملاء والموردين' : 'اختر العميل'; select.append(empty);
+        list.forEach(c => { const option=document.createElement('option'); option.value=c.id; option.textContent=c.name + (c.phone ? ' · '+c.phone : ''); option.dataset.phone=c.phone || ''; select.append(option); });
+        if ([...select.options].some(o => o.value === previous)) select.value = previous;
+        $(statusId).textContent = list.length ? (list.length === 50 ? 'تظهر أول 50 نتيجة؛ اكتب اسمًا للبحث.' : '') : 'لا توجد نتائج. جرّب اسمًا آخر.';
+      }).catch(e => { if (request === (isDocument ? documentPartnerRequest : customerRequest)) $(statusId).textContent = 'تعذر تحميل القائمة: ' + e.message; });
     }
+    function findCustomers() { clearTimeout(customerTimer); customerTimer=setTimeout(() => populatePartners('customer','customerStatus',$('customerSearch').value,false),300); }
+    function findDocumentPartners() { clearTimeout(documentPartnerTimer); documentPartnerTimer=setTimeout(() => populatePartners('documentPartner','documentPartnerStatus',$('partnerQuery').value,true),300); }
     function dateValue(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
     function setPeriod() {
       const now=new Date(), mode=$('period').value;
