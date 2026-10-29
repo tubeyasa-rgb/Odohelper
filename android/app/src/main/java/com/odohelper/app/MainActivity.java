@@ -29,7 +29,9 @@ public class MainActivity extends Activity {
   private int companyId;
   private final java.util.concurrent.ExecutorService worker = Executors.newSingleThreadExecutor();
   @Override public void onCreate(Bundle state) {
-    super.onCreate(state); web = new WebView(this); setContentView(web);
+    super.onCreate(state);
+    if(android.os.Build.VERSION.SDK_INT>=26) ((android.app.NotificationManager)getSystemService(NOTIFICATION_SERVICE)).createNotificationChannel(new android.app.NotificationChannel("invoice_due","الفواتير المستحقة",android.app.NotificationManager.IMPORTANCE_DEFAULT));
+    web = new WebView(this); setContentView(web);
     web.getSettings().setJavaScriptEnabled(true);
     web.getSettings().setDomStorageEnabled(true);
     web.setWebChromeClient(new WebChromeClient());
@@ -128,9 +130,9 @@ public class MainActivity extends Activity {
       base=new URI("https",null,uri.getHost(),uri.getPort(),null,null,null).toString(); cookie=null;
       String db=body.optString("db").trim(); if(db.isEmpty()){JSONArray dbs=(JSONArray)rpc("/web/database/list",new JSONObject()); if(dbs.length()!=1) throw new Exception("اكتب اسم قاعدة البيانات للمتابعة"); db=dbs.getString(0);}
       JSONObject auth=(JSONObject)rpc("/web/session/authenticate",obj("db",db,"login",body.optString("login"),"password",body.optString("password")));
-      if(auth.optInt("uid",0)==0) throw new Exception("بيانات الدخول غير صحيحة"); JSONObject companies=auth.optJSONObject("user_companies"); companyId=companies==null?0:companies.optInt("current_company",0); return obj("name",auth.optString("name"));
+      if(auth.optInt("uid",0)==0) throw new Exception("بيانات الدخول غير صحيحة"); JSONObject companies=auth.optJSONObject("user_companies"); companyId=companies==null?0:companies.optInt("current_company",0); String warning="";try{if(cookie==null)throw new Exception();InvoiceReminders.enable(this,base,cookie);}catch(Exception e){warning="تعذر تفعيل إشعارات الفواتير على هذا الجهاز";} return obj("name",auth.optString("name"),"warning",warning);
     }
-    if(path.equals("/logout")){base=null;cookie=null;return new JSONObject();}
+    if(path.equals("/logout")){InvoiceReminders.disable(this);base=null;cookie=null;return new JSONObject();}
     if(base==null || cookie==null) throw new Exception("سجّل الدخول أولاً");
     if(path.equals("/contacts")) {
       JSONArray output=new JSONArray(), contacts=body.optJSONArray("contacts"); if(contacts==null)return output;
@@ -150,6 +152,12 @@ public class MainActivity extends Activity {
     if(path.equals("/ledger")) return ledger(body);
     if(path.equals("/share_ledger")) { shareLedger(body); return new JSONObject(); }
     if(path.equals("/share_pdf")) { shareReport(body); return new JSONObject(); }
+    if(path.equals("/reminder")) {
+      int id=body.getInt("id"); JSONArray invoices=(JSONArray)call("account.move","search_read",arr(arr(arr("id","=",id))),obj("fields",arr("name","partner_id","invoice_date_due"),"limit",1));
+      if(invoices.length()==0)throw new Exception("الفاتورة غير متاحة");JSONObject invoice=invoices.getJSONObject(0);JSONArray partner=invoice.optJSONArray("partner_id");String phone="";
+      if(partner!=null){JSONObject fields=(JSONObject)call("res.partner","fields_get",arr(),obj("attributes",arr("type")));if(fields.has("phone")){JSONArray people=(JSONArray)call("res.partner","search_read",arr(arr(arr("id","=",partner.getInt(0)))),obj("fields",arr("phone"),"limit",1));if(people.length()>0){phone=people.getJSONObject(0).optString("phone","");if(phone.equals("false"))phone="";}}}
+      return obj("phone",phone,"message","مرحبًا، تذكير بموعد استحقاق الفاتورة " + invoice.optString("name") + " بتاريخ " + invoice.optString("invoice_date_due", "") + ". شكرًا لكم.");
+    }
     if(path.equals("/portal")) {
       String model=body.getString("model");int id=body.getInt("id");
       if(id<=0 || !(model.equals("sale.order") || model.equals("purchase.order") || model.equals("account.move"))) throw new Exception("الرابط الخارجي غير متاح لهذا المستند");
@@ -158,11 +166,21 @@ public class MainActivity extends Activity {
       return obj("url",base+portal);
     }
     if(path.equals("/reports")) {JSONArray output=new JSONArray();String[][] models={{"sale.order","مبيعات"},{"purchase.order","مشتريات"},{"account.move","فواتير"},{"account.payment","مدفوعات"}};
-      String selected=body.optString("type","all"); int partner=body.optInt("partner",0);int failures=0;
-      for(String[] model:models){if(!selected.equals("all")&&!selected.equals(model[0]))continue;
+      String selected=body.optString("type","all"), status=body.optString("status","all"), from=body.optString("from"), to=body.optString("to"); int partner=body.optInt("partner",0);int failures=0;
+      boolean invoiceFilter=!status.equals("all") || !from.isEmpty() || !to.isEmpty(); if(invoiceFilter) selected="account.move";
+      for(String[] model:models){if(!selected.equals("all")&&!selected.equals(model[0]))continue;if(invoiceFilter&&!model[0].equals("account.move"))continue;
         try{JSONArray domain=arr(arr("name","ilike",body.optString("query")));if(partner>0)domain.put(arr("partner_id","child_of",partner));
-          JSONArray rows=(JSONArray)call(model[0],"search_read",arr(domain),obj("fields",arr("name","id","partner_id"),"limit",20,"order","id desc"));
+          JSONArray fields=arr("name","id","partner_id");
+          if(model[0].equals("account.move")){
+            domain.put(arr("move_type","in",arr("out_invoice","in_invoice")));fields.put("invoice_date").put("invoice_date_due").put("payment_state");
+            if(!from.isEmpty())domain.put(arr("invoice_date",">=",from));if(!to.isEmpty())domain.put(arr("invoice_date","<=",to));
+            if(status.equals("paid"))domain.put(arr("payment_state","=","paid"));
+            if(status.equals("unpaid") || status.equals("overdue")){domain.put(arr("state","=","posted"));domain.put(arr("payment_state","in",arr("not_paid","partial")));}
+            if(status.equals("overdue"))domain.put(arr("invoice_date_due","<",new java.text.SimpleDateFormat("yyyy-MM-dd",java.util.Locale.US).format(new java.util.Date())));
+          }
+          JSONArray rows=(JSONArray)call(model[0],"search_read",arr(domain),obj("fields",fields,"limit",20,"order","id desc"));
           for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);int id=row.getInt("id");JSONObject item=obj("name",row.optString("name"),"label",model[1],"model",model[0],"id",id,"url",base+"/web#id="+id+"&model="+model[0]+"&view_type=form");
+            if(model[0].equals("account.move")){ item.put("date",row.opt("invoice_date"));item.put("due",row.opt("invoice_date_due"));item.put("payment",row.opt("payment_state")); }
             output.put(item);
           }
         }catch(Exception e){failures++;}}

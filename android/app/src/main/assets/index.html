@@ -296,6 +296,9 @@
         <label for="documentPartner">العميل أو المورد</label><select id="documentPartner"><option value="">كل العملاء والموردين</option></select>
         <p id="documentPartnerStatus" aria-live="polite"></p>
         <label for="docType">نوع المستند</label><select id="docType"><option value="all">الكل</option><option value="sale.order">المبيعات</option><option value="purchase.order">المشتريات</option><option value="account.move">الفواتير</option><option value="account.payment">المدفوعات</option></select>
+        <label for="invoiceStatus">حالة الفاتورة</label><select id="invoiceStatus"><option value="all">كل الحالات</option><option value="paid">مدفوعة</option><option value="unpaid">غير مدفوعة أو مدفوعة جزئيًا</option><option value="overdue">متأخرة</option></select>
+        <label for="invoiceFrom">تاريخ الفاتورة من</label><input type="date" id="invoiceFrom"><label for="invoiceTo">إلى</label><input type="date" id="invoiceTo">
+        <p><small>فلاتر الحالة والتاريخ تعرض الفواتير فقط.</small></p>
         <p><button onclick="search()">بحث</button> <button class="secondary" onclick="clearDocumentFilters()">عرض الكل</button></p>
         <div id="results" aria-live="polite">جاري تحميل المستندات...</div>
         <small>تظهر المستندات المتاحة لحسابك؛ مشاركة PDF تستخدم تقرير أودو.</small>
@@ -421,6 +424,7 @@
 
         $('greeting').textContent =
           'أهلاً بيك، ' + result.name;
+        if (result.warning) alert(result.warning);
 
         $('top').textContent = 'تسجيل الخروج';
 
@@ -540,17 +544,18 @@
     let swipeStart = null;
     document.addEventListener('touchstart', e => { if (!$('app').classList.contains('hidden') && e.touches.length === 1 && e.touches[0].clientX < 50) swipeStart = {x:e.touches[0].clientX, y:e.touches[0].clientY}; else swipeStart = null; }, {passive:true});
     document.addEventListener('touchend', e => { if (!swipeStart || !e.changedTouches.length) return; const dx=e.changedTouches[0].clientX-swipeStart.x, dy=e.changedTouches[0].clientY-swipeStart.y; swipeStart=null; if(dx>65 && Math.abs(dx)>Math.abs(dy)*1.5) toggleDrawer(true); }, {passive:true});
-    function clearDocumentFilters() { $('query').value=''; $('partnerQuery').value=''; $('documentPartner').value=''; $('docType').value='all'; findDocumentPartners(); search(); }
+    function clearDocumentFilters() { $('query').value=''; $('partnerQuery').value=''; $('documentPartner').value=''; $('docType').value='all'; $('invoiceStatus').value='all'; $('invoiceFrom').value=''; $('invoiceTo').value=''; findDocumentPartners(); search(); }
     let timer;
 
     function search() {
       clearTimeout(timer);
 
+      if ($('invoiceFrom').value && $('invoiceTo').value && $('invoiceFrom').value > $('invoiceTo').value) { $('results').textContent = 'حدد فترة صحيحة.'; return; }
       $('results').textContent = 'جاري تحميل المستندات...';
       timer = setTimeout(async () => {
         try {
           const rows = await api('/reports', {
-            query: $('query').value, partner: Number($('documentPartner').value) || 0, type: $('docType').value
+            query: $('query').value, partner: Number($('documentPartner').value) || 0, type: $('docType').value, status: $('invoiceStatus').value, from: $('invoiceFrom').value, to: $('invoiceTo').value
           });
 
           $('results').replaceChildren();
@@ -582,6 +587,17 @@
               finally { share.disabled = false; }
             };
             row.append(link, share);
+            if (item.model === 'account.move') {
+              const info = document.createElement('small'); const labels={paid:'مدفوعة',not_paid:'غير مدفوعة',partial:'مدفوعة جزئيًا',in_payment:'قيد الدفع',reversed:'معكوسة'};
+              info.textContent = [item.date && item.date !== false ? 'التاريخ: '+item.date : '', item.due && item.due !== false ? 'الاستحقاق: '+item.due : '', labels[item.payment] || item.payment || ''].filter(Boolean).join(' · '); row.append(info);
+              const reminder=document.createElement('button'); reminder.className='secondary'; reminder.textContent='رسالة تذكير';
+              reminder.onclick=async()=>{reminder.disabled=true;try{
+                const result=await api('/reminder',{id:item.id});
+                const number=prompt('رقم العميل أو المورد بمفتاح الدولة (مثال +201...)',result.phone || ''); if(number===null)return;
+                const digits=number.replace(/[^0-9]/g,''); if(!number.trim().startsWith('+') || digits.length<8){alert('اكتب الرقم بمفتاح الدولة، مثل +20');return;}
+                const link=document.createElement('a');link.href='https://wa.me/'+digits+'?text='+encodeURIComponent(result.message);link.textContent='فتح الرسالة على واتساب';reminder.replaceWith(link);
+              }catch(e){alert(e.message)}finally{reminder.disabled=false}}; row.append(reminder);
+            }
             if (item.model !== 'account.payment') {
               const portal = document.createElement('button');
               portal.className = 'secondary'; portal.textContent = 'الرابط الخارجي';
