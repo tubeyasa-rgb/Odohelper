@@ -141,9 +141,15 @@
     }
 
     select { width: 100%; background: white; color: #202622; }
-    .menu { display: flex; gap: 8px; overflow-x: auto; margin: 24px 0; padding-bottom: 6px; }
-    .menu button { flex: 0 0 auto; background: #edf4ea; color: #5d7757; }
-    .menu button.active { background: #718b69; color: white; }
+    .drawer-backdrop { position:fixed; inset:0; background:#18221988; z-index:20; }
+    .drawer { position:fixed; z-index:21; left:0; top:0; bottom:0; width:min(300px, 85vw); padding:24px; background:#fff; box-shadow:0 0 25px #0003; overflow-y:auto; }
+    .drawer button { display:block; width:100%; text-align:right; margin:8px 0; background:#edf4ea; color:#5d7757; }
+    .drawer button.active { background:#718b69; color:white; }
+    .home-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:25px; }
+    .home-tile { text-align:right; background:white; color:#202622; border:1px solid #e0e9df; min-height:130px; }
+    .home-tile span { display:block; color:#718b69; font-size:25px; margin-bottom:12px; }
+    #menuButton { margin-left:8px; }
+
     .document-row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:16px 0; border-bottom:1px solid #edf0ec; }
     .document-row > a:first-child { width:100%; font-weight:700; }
     form input,
@@ -208,6 +214,7 @@
     <div class="logo">
       odo<span>helper</span> ◒
     </div>
+    <button id="menuButton" class="secondary hidden" onclick="toggleDrawer(true)" aria-label="فتح القائمة">☰</button>
 
     <button
       id="top"
@@ -262,13 +269,26 @@
     <section id="app" class="hidden">
       <span class="tag">مساحة عملك ✦</span>
       <h2 id="greeting">أهلاً بيك</h2>
-      <nav class="menu" aria-label="أقسام التطبيق">
+      <div id="drawerBackdrop" class="drawer-backdrop hidden" onclick="toggleDrawer(false)"></div>
+      <nav id="drawer" class="drawer hidden" aria-label="قائمة الأقسام">
+        <h2>القائمة</h2>
+        <button id="nav-home" onclick="openSection('home')">الرئيسية</button>
         <button id="nav-documents" onclick="openSection('documents')">المستندات</button>
         <button id="nav-contacts" onclick="openSection('contactsSection')">جهات الاتصال</button>
         <button id="nav-ledger" onclick="openSection('ledger')">كشف الحساب</button>
         <button id="nav-settings" onclick="openSection('settings')">الإعدادات</button>
+        <button onclick="toggleDrawer(false)">إغلاق القائمة</button>
       </nav>
-      <section id="documents" class="card">
+      <section id="home">
+        <h2>أقسام التطبيق</h2><p>اختار القسم اللي عايز تفتحه.</p>
+        <div class="home-grid">
+          <button class="home-tile" onclick="openSection('documents')"><span>▤</span>المستندات</button>
+          <button class="home-tile" onclick="openSection('contactsSection')"><span>♙</span>جهات الاتصال</button>
+          <button class="home-tile" onclick="openSection('ledger')"><span>☰</span>كشف حساب العميل</button>
+          <button class="home-tile" onclick="openSection('settings')"><span>⚙</span>الإعدادات</button>
+        </div>
+      </section>
+      <section id="documents" class="card hidden">
         <div class="icon">▤</div><h2>المستندات</h2>
         <p>المستندات المتاحة تظهر هنا. استخدم الفلاتر للبحث.</p>
         <label for="query">رقم المستند</label><input class="search" id="query" placeholder="رقم أو اسم المستند">
@@ -397,6 +417,7 @@
 
         $('welcome').classList.add('hidden');
         $('app').classList.remove('hidden');
+        $('menuButton').classList.remove('hidden');
 
         $('greeting').textContent =
           'أهلاً بيك، ' + result.name;
@@ -415,13 +436,15 @@
           $('password').value = '';
           $('upload').classList.add('hidden');
           $('app').classList.add('hidden');
+          $('menuButton').classList.add('hidden');
+          toggleDrawer(false);
           $('welcome').classList.remove('hidden');
           $('top').textContent = 'تسجيل الدخول ←';
           $('top').onclick = () => login.showModal();
         };
 
         try { $('sendMode').value = localStorage.getItem('sendMode') || 'manual'; } catch (_) {}
-        openSection('documents');
+        openSection('home');
         setPeriod();
         search();
         findCustomers();
@@ -509,9 +532,14 @@
 
     function saveSendMode() { try { localStorage.setItem('sendMode', $('sendMode').value); } catch (_) {} }
     function openSection(section) {
-      const menus = {documents:'nav-documents', contactsSection:'nav-contacts', ledger:'nav-ledger', settings:'nav-settings'};
+      const menus = {home:'nav-home', documents:'nav-documents', contactsSection:'nav-contacts', ledger:'nav-ledger', settings:'nav-settings'};
       Object.keys(menus).forEach(id => { $(id).classList.toggle('hidden', id !== section); $(menus[id]).classList.toggle('active', id === section); });
+      toggleDrawer(false); window.scrollTo(0, 0);
     }
+    function toggleDrawer(open) { $('drawer').classList.toggle('hidden', !open); $('drawerBackdrop').classList.toggle('hidden', !open); }
+    let swipeStart = null;
+    document.addEventListener('touchstart', e => { if (!$('app').classList.contains('hidden') && e.touches.length === 1 && e.touches[0].clientX < 50) swipeStart = {x:e.touches[0].clientX, y:e.touches[0].clientY}; else swipeStart = null; }, {passive:true});
+    document.addEventListener('touchend', e => { if (!swipeStart || !e.changedTouches.length) return; const dx=e.changedTouches[0].clientX-swipeStart.x, dy=e.changedTouches[0].clientY-swipeStart.y; swipeStart=null; if(dx>65 && Math.abs(dx)>Math.abs(dy)*1.5) toggleDrawer(true); }, {passive:true});
     function clearDocumentFilters() { $('query').value=''; $('partnerQuery').value=''; $('documentPartner').value=''; $('docType').value='all'; findDocumentPartners(); search(); }
     let timer;
 

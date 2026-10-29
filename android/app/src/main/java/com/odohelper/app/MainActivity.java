@@ -141,9 +141,11 @@ public class MainActivity extends Activity {
     }
     if(path.equals("/customers")) {
       String query=body.optString("query");
-      JSONArray domain=arr("|", arr("name","ilike",query), arr("phone","ilike",query));
-      JSONArray rows=(JSONArray)call("res.partner","search_read",arr(domain),obj("fields",arr("name","phone","mobile"),"limit",50,"order","name asc"));
-      JSONArray out=new JSONArray(); for(int i=0;i<rows.length();i++){JSONObject r=rows.getJSONObject(i);String phone=r.optString("mobile",""); if(phone.equals("false") || phone.isEmpty()) phone=r.optString("phone","");if(phone.equals("false"))phone="";out.put(obj("id",r.getInt("id"),"name",r.optString("name"),"phone",phone));}return out;
+      JSONObject fields=(JSONObject)call("res.partner","fields_get",arr(),obj("attributes",arr("type")));
+      JSONArray wanted=arr("name"); if(fields.has("phone")) wanted.put("phone");
+      JSONArray domain=fields.has("phone") ? arr("|",arr("name","ilike",query),arr("phone","ilike",query)) : arr(arr("name","ilike",query));
+      JSONArray rows=(JSONArray)call("res.partner","search_read",arr(domain),obj("fields",wanted,"limit",50,"order","name asc"));
+      JSONArray out=new JSONArray(); for(int i=0;i<rows.length();i++){JSONObject r=rows.getJSONObject(i);String phone=r.optString("phone","");if(phone.equals("false"))phone="";out.put(obj("id",r.getInt("id"),"name",r.optString("name"),"phone",phone));}return out;
     }
     if(path.equals("/ledger")) return ledger(body);
     if(path.equals("/share_ledger")) { shareLedger(body); return new JSONObject(); }
