@@ -5,6 +5,10 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.Manifest;
 import android.app.AlertDialog;
+import android.graphics.pdf.PdfDocument;
+import android.graphics.Paint;
+import android.net.Uri;
+import java.util.UUID;
 import android.content.pm.PackageManager;
 import java.util.ArrayList;
 import android.os.Bundle;
@@ -21,6 +25,7 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
   private WebView web;
   private String base, cookie;
+  private int companyId;
   private final java.util.concurrent.ExecutorService worker = Executors.newSingleThreadExecutor();
   @Override public void onCreate(Bundle state) {
     super.onCreate(state); web = new WebView(this); setContentView(web);
@@ -120,7 +125,7 @@ public class MainActivity extends Activity {
       base=new URI("https",null,uri.getHost(),uri.getPort(),null,null,null).toString(); cookie=null;
       String db=body.optString("db").trim(); if(db.isEmpty()){JSONArray dbs=(JSONArray)rpc("/web/database/list",new JSONObject()); if(dbs.length()!=1) throw new Exception("اكتب اسم قاعدة البيانات للمتابعة"); db=dbs.getString(0);}
       JSONObject auth=(JSONObject)rpc("/web/session/authenticate",obj("db",db,"login",body.optString("login"),"password",body.optString("password")));
-      if(auth.optInt("uid",0)==0) throw new Exception("بيانات الدخول غير صحيحة"); return obj("name",auth.optString("name"));
+      if(auth.optInt("uid",0)==0) throw new Exception("بيانات الدخول غير صحيحة"); JSONObject companies=auth.optJSONObject("user_companies"); companyId=companies==null?0:companies.optInt("current_company",0); return obj("name",auth.optString("name"));
     }
     if(path.equals("/logout")){base=null;cookie=null;return new JSONObject();}
     if(base==null || cookie==null) throw new Exception("سجّل الدخول أولاً");
@@ -131,9 +136,64 @@ public class MainActivity extends Activity {
           if(existing.length()>0)status="موجود بالفعل";else {call("res.partner","create",arr(obj("name",name,"phone",phone.isEmpty()?false:phone,"email",contact.optString("email").isEmpty()?false:contact.optString("email"))),new JSONObject());status="تم الرفع";}
         }catch(Exception e){status=e.getMessage();}output.put(obj("name",name,"status",status));}return output;
     }
-    if(path.equals("/reports")) {JSONArray output=new JSONArray();String[][] models={{"sale.order","مبيعات"},{"purchase.order","مشتريات"},{"account.move","حسابات"}};
-      for(String[] model:models){try{JSONArray rows=(JSONArray)call(model[0],"search_read",arr(arr(arr("name","ilike",body.optString("query")))),obj("fields",arr("name","id"),"limit",20,"order","id desc"));for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);output.put(obj("name",row.optString("name"),"label",model[1],"url",base+"/web#id="+row.getInt("id")+"&model="+model[0]+"&view_type=form"));}}catch(Exception ignored){}}return output;}
+    if(path.equals("/customers")) {
+      String query=body.optString("query");
+      JSONArray domain=arr("|", arr("name","ilike",query), arr("phone","ilike",query));
+      JSONArray rows=(JSONArray)call("res.partner","search_read",arr(domain),obj("fields",arr("name","phone","mobile"),"limit",50,"order","name asc"));
+      JSONArray out=new JSONArray(); for(int i=0;i<rows.length();i++){JSONObject r=rows.getJSONObject(i);String phone=r.optString("mobile",""); if(phone.equals("false") || phone.isEmpty()) phone=r.optString("phone","");if(phone.equals("false"))phone="";out.put(obj("id",r.getInt("id"),"name",r.optString("name"),"phone",phone));}return out;
+    }
+    if(path.equals("/ledger")) return ledger(body);
+    if(path.equals("/share_ledger")) { shareLedger(body); return new JSONObject(); }
+    if(path.equals("/share_pdf")) { shareReport(body); return new JSONObject(); }
+    if(path.equals("/reports")) {JSONArray output=new JSONArray();String[][] models={{"sale.order","مبيعات"},{"purchase.order","مشتريات"},{"account.move","فواتير"},{"account.payment","مدفوعات"}};
+      String selected=body.optString("type","all"), partner=body.optString("partner").trim();int failures=0;
+      for(String[] model:models){if(!selected.equals("all")&&!selected.equals(model[0]))continue;
+        try{JSONArray domain=arr(arr("name","ilike",body.optString("query")));if(!partner.isEmpty())domain.put(arr("partner_id.name","ilike",partner));
+          JSONArray rows=(JSONArray)call(model[0],"search_read",arr(domain),obj("fields",arr("name","id","partner_id"),"limit",20,"order","id desc"));
+          for(int i=0;i<rows.length();i++){JSONObject row=rows.getJSONObject(i);int id=row.getInt("id");JSONObject item=obj("name",row.optString("name"),"label",model[1],"model",model[0],"id",id,"url",base+"/web#id="+id+"&model="+model[0]+"&view_type=form");
+            if(!model[0].equals("account.payment")) {try{Object portal=call(model[0],"get_portal_url",arr(arr(id)),new JSONObject());if(portal instanceof String && ((String)portal).startsWith("/my/"))item.put("portal",base+portal);}catch(Exception ignored){}}
+            output.put(item);
+          }
+        }catch(Exception e){failures++;}}
+      if(output.length()==0 && failures>0) throw new Exception("تعذر البحث في بعض الأقسام. تحقق من الصلاحيات أو نوع المستند.");return output;}
     throw new Exception("طلب غير معروف");
+  }
+  private JSONObject ledger(JSONObject body) throws Exception {
+    int partner=body.getInt("id"); String from=body.getString("from"),to=body.getString("to");
+    if(companyId<=0) throw new Exception("تعذر تحديد الشركة الحالية في أودو.");
+    if(!from.matches("\\d{4}-\\d{2}-\\d{2}") || !to.matches("\\d{4}-\\d{2}-\\d{2}") || from.compareTo(to)>0) throw new Exception("حدد فترة صحيحة");
+    JSONArray domain=arr(arr("partner_id","child_of",partner),arr("company_id","=",companyId),arr("parent_state","=","posted"),arr("account_id.account_type","=","asset_receivable"),arr("date","<=",to));
+    JSONArray rows=(JSONArray)call("account.move.line","search_read",arr(domain),obj("fields",arr("date","name","debit","credit"),"limit",10001,"order","date asc, id asc"));
+    if(rows.length()>10000) throw new Exception("عدد الحركات كبير جدًا، يرجى استخدام تقرير أودو الأصلي.");
+    double opening=0,balance=0;JSONArray lines=new JSONArray();
+    for(int i=0;i<rows.length();i++){JSONObject r=rows.getJSONObject(i);double delta=r.optDouble("debit",0)-r.optDouble("credit",0);balance+=delta;if(r.getString("date").compareTo(from)<0)opening+=delta;else lines.put(r);}
+    return obj("opening",opening,"closing",balance,"lines",lines);
+  }
+  private void shareFile(File file,String phone) {
+    Uri uri=Uri.parse("content://com.odohelper.app.pdf/"+file.getName());
+    Intent intent=new Intent(Intent.ACTION_SEND);intent.setType("application/pdf");intent.putExtra(Intent.EXTRA_STREAM,uri);intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+    // WhatsApp accepts a recipient hint on supported versions; the user still confirms sending.
+    String digits=phone==null?"":phone.replaceAll("[^0-9]","");
+    if(digits.length()>=8 && phone.trim().startsWith("+")) { intent.setPackage("com.whatsapp"); intent.putExtra("jid",digits+"@s.whatsapp.net"); }
+    runOnUiThread(() -> {try {startActivity(Intent.createChooser(intent,"مشاركة PDF"));} catch(Exception e){contactMessage("تعذر فتح تطبيق للمشاركة");}});
+  }
+  private void shareReport(JSONObject body) throws Exception {
+    String model=body.getString("model"), report;
+    switch(model){case "sale.order":report="sale.report_saleorder";break;case "purchase.order":report="purchase.report_purchaseorder";break;case "account.move":report="account.account_invoices";break;case "account.payment":report="account.report_payment_receipt";break;default:throw new Exception("نوع مستند غير مدعوم");}
+    int id=body.getInt("id"); if(id<=0) throw new Exception("مستند غير صالح");
+    HttpURLConnection c=(HttpURLConnection)new URL(base+"/report/pdf/"+report+"/"+id).openConnection();c.setConnectTimeout(15000);c.setReadTimeout(60000);c.setInstanceFollowRedirects(false);c.setRequestProperty("Cookie",cookie);
+    if(c.getResponseCode()!=200 || !String.valueOf(c.getContentType()).toLowerCase().startsWith("application/pdf"))throw new IOException("تعذر إنشاء PDF من أودو. تحقق من صلاحية التقرير وإعداداته.");
+    File file=new File(getCacheDir(),UUID.randomUUID().toString()+".pdf");try(InputStream in=c.getInputStream();OutputStream out=new FileOutputStream(file)){byte[] b=new byte[8192];int n;long size=0;while((n=in.read(b))!=-1){size+=n;if(size>25*1024*1024)throw new IOException("حجم الملف أكبر من 25 ميجابايت");out.write(b,0,n);}} shareFile(file,"");
+  }
+  private void shareLedger(JSONObject body) throws Exception {
+    JSONObject data=ledger(body);JSONArray lines=data.getJSONArray("lines");PdfDocument pdf=new PdfDocument();Paint paint=new Paint();paint.setTextSize(12);int pageNo=1;PdfDocument.Page page=pdf.startPage(new PdfDocument.PageInfo.Builder(595,842,pageNo).create());float y=45;
+    page.getCanvas().drawText("Customer ledger: "+body.optString("name"),35,y,paint);y+=24;
+    page.getCanvas().drawText(body.getString("from")+" - "+body.getString("to"),35,y,paint);y+=24;
+    page.getCanvas().drawText(String.format(java.util.Locale.US,"Opening: %.2f",data.getDouble("opening")),35,y,paint);y+=24;
+    for(int i=0;i<lines.length();i++){if(y>790){pdf.finishPage(page);page=pdf.startPage(new PdfDocument.PageInfo.Builder(595,842,++pageNo).create());y=45;}
+      JSONObject line=lines.getJSONObject(i);String text=String.format(java.util.Locale.US,"%s  %s  Debit: %.2f  Credit: %.2f",line.optString("date"),line.optString("name"),line.optDouble("debit"),line.optDouble("credit"));page.getCanvas().drawText(text,35,y,paint);y+=20;}
+    if(y>790){pdf.finishPage(page);page=pdf.startPage(new PdfDocument.PageInfo.Builder(595,842,++pageNo).create());y=45;}page.getCanvas().drawText(String.format(java.util.Locale.US,"Closing: %.2f",data.getDouble("closing")),35,y,paint);pdf.finishPage(page);
+    File file=new File(getCacheDir(),UUID.randomUUID().toString()+".pdf");try(OutputStream out=new FileOutputStream(file)){pdf.writeTo(out);}finally{pdf.close();}shareFile(file,body.optString("phone"));
   }
   @Override protected void onDestroy(){ worker.shutdownNow(); web.destroy(); super.onDestroy(); }
 }

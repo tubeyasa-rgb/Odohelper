@@ -247,7 +247,7 @@
 
           <p>
             ابحث في المبيعات والمشتريات والحسابات
-            المتاحة لك، وشارك الروابط بسهولة على واتساب.
+            المتاحة لك، وشارك ملفات PDF بسهولة.
           </p>
         </div>
       </div>
@@ -288,8 +288,7 @@
           <h2>البحث والمشاركة</h2>
 
           <p>
-            ابحث برقم المستند في المبيعات
-            والمشتريات والحسابات.
+            ابحث برقم المستند أو اسم العميل أو المورد، ثم شارك ملف PDF.
           </p>
 
           <input
@@ -299,13 +298,25 @@
             oninput="search()"
           >
 
+          <label>العميل أو المورد</label><input class="search" id="partnerQuery" placeholder="اسم العميل أو المورد" oninput="search()">
+          <label>نوع المستند</label><select id="docType" onchange="search()"><option value="all">الكل</option><option value="sale.order">المبيعات</option><option value="purchase.order">المشتريات</option><option value="account.move">الفواتير</option><option value="account.payment">المدفوعات</option></select>
           <div id="results"></div>
 
           <small>
             تظهر المستندات المتاحة لحسابك.
-            المشاركة ترسل رابط المستند.
+            مشاركة PDF تستخدم تقرير أودو حسب صلاحيات حسابك.
           </small>
         </div>
+      </div>
+      <div class="card" style="margin-top:18px"><h2>إعدادات الإرسال</h2><label for="sendMode">طريقة إرسال كشف الحساب</label><select id="sendMode" onchange="localStorage.setItem('sendMode',this.value)"><option value="manual">فتح واتساب وإرسال الملف يدويًا</option><option value="business">إرسال تلقائي عبر WhatsApp Business</option></select><p><small>الإرسال التلقائي يحتاج إعداد وربط WhatsApp Business API.</small></p></div>
+      <div class="card" style="margin-top:18px">
+        <div class="icon">☰</div><h2>كشف حساب العميل</h2>
+        <p>ابحث عن العميل وحدد الفترة لعرض قيود حساب العملاء المرحلة.</p>
+        <label>بحث عن العميل</label><input class="search" id="customerSearch" placeholder="اسم العميل أو رقم الهاتف" oninput="findCustomers()">
+        <label>العميل</label><select id="customer" style="width:100%"></select>
+        <label>الفترة</label><select id="period" onchange="setPeriod()"><option value="month">هذا الشهر</option><option value="last">الشهر الماضي</option><option value="year">هذه السنة</option><option value="custom">فترة مخصصة</option></select>
+        <label>من</label><input type="date" id="dateFrom"><label>إلى</label><input type="date" id="dateTo">
+        <p><button onclick="loadLedger()">عرض كشف الحساب</button></p><div id="ledgerResult"></div>
       </div>
     </section>
 
@@ -428,6 +439,9 @@
           $('top').onclick = () => login.showModal();
         };
 
+        $('sendMode').value = localStorage.getItem('sendMode') || 'manual';
+        setPeriod();
+        findCustomers();
         search();
       } catch (error) {
         $('loginError').textContent = error.message;
@@ -518,7 +532,7 @@
       timer = setTimeout(async () => {
         try {
           const rows = await api('/reports', {
-            query: $('query').value
+            query: $('query').value, partner: $('partnerQuery').value, type: $('docType').value
           });
 
           $('results').replaceChildren();
@@ -541,27 +555,60 @@
             link.textContent =
               item.label + ' · ' + item.name;
 
-            const share = document.createElement('a');
-
-            share.href =
-              'https://wa.me/?text=' +
-              encodeURIComponent(
-                item.label + ' · ' +
-                item.name + '\n' +
-                item.url
-              );
-
-            share.target = '_self';
-            share.rel = 'noopener';
-            share.textContent = 'واتساب ↗';
-
+            const share = document.createElement('button');
+            share.textContent = 'مشاركة PDF';
+            share.onclick = async () => {
+              share.disabled = true;
+              try { await api('/share_pdf', {model:item.model,id:item.id}); }
+              catch(error) { alert(error.message); }
+              finally { share.disabled = false; }
+            };
             row.append(link, share);
+            if (item.portal) {
+              const portal = document.createElement('a');
+              portal.href = 'https://wa.me/?text=' + encodeURIComponent(item.portal);
+              portal.textContent = 'مشاركة الرابط الخارجي';
+              row.append(portal);
+            }
             $('results').append(row);
           });
         } catch (error) {
           $('results').textContent = error.message;
         }
       }, 300);
+    }
+    let customerTimer;
+    function findCustomers() {
+      clearTimeout(customerTimer);
+      customerTimer = setTimeout(async () => {
+        try {
+          const list = await api('/customers', {query:$('customerSearch').value});
+          $('customer').replaceChildren();
+          list.forEach(c => { const option=document.createElement('option'); option.value=c.id; option.textContent=c.name + (c.phone ? ' · '+c.phone : ''); option.dataset.phone=c.phone || ''; $('customer').append(option); });
+        } catch(e) { $('ledgerResult').textContent=e.message; }
+      }, 300);
+    }
+    function dateValue(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+    function setPeriod() {
+      const now=new Date(), mode=$('period').value;
+      if(mode==='custom') return;
+      const from=mode==='year'?new Date(now.getFullYear(),0,1):mode==='last'?new Date(now.getFullYear(),now.getMonth()-1,1):new Date(now.getFullYear(),now.getMonth(),1);
+      const to=mode==='last'?new Date(now.getFullYear(),now.getMonth(),0):now;
+      $('dateFrom').value=dateValue(from); $('dateTo').value=dateValue(to);
+    }
+    async function loadLedger() {
+      const customer=$('customer'); if(!customer.value) { $('ledgerResult').textContent='اختار عميل أولاً'; return; }
+      const from=$('dateFrom').value, to=$('dateTo').value;
+      if(!from || !to || from>to) { $('ledgerResult').textContent='حدد فترة صحيحة'; return; }
+      $('ledgerResult').textContent='جاري تحميل كشف الحساب...';
+      try {
+        const data={id:Number(customer.value),from,to};
+        const ledger=await api('/ledger',data);
+        $('ledgerResult').replaceChildren();
+        const summary=document.createElement('p'); summary.textContent=`رصيد أول المدة: ${ledger.opening.toFixed(2)} · رصيد آخر المدة: ${ledger.closing.toFixed(2)} · عدد الحركات: ${ledger.lines.length}`; $('ledgerResult').append(summary);
+        const table=document.createElement('div'); ledger.lines.forEach(line=>{const p=document.createElement('p');p.textContent=`${line.date} · ${line.name} · مدين ${line.debit} · دائن ${line.credit}`;table.append(p)}); $('ledgerResult').append(table);
+        const share=document.createElement('button'); share.textContent='مشاركة كشف الحساب PDF'; share.onclick=async()=>{if($('sendMode').value==='business'){alert('يلزم إعداد وربط WhatsApp Business API لتفعيل الإرسال التلقائي. اختر الإرسال اليدوي حاليًا.');return;} share.disabled=true;try{await api('/share_ledger',{...data,name:customer.selectedOptions[0].textContent,phone:customer.selectedOptions[0].dataset.phone});}catch(e){alert(e.message)}finally{share.disabled=false}}; $('ledgerResult').append(share);
+      } catch(e) { $('ledgerResult').textContent=e.message; }
     }
   </script>
 </body>
